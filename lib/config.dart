@@ -7,5 +7,14 @@ class AppConfig {
   /// comes back as a confusing 401.
   static const apiKey = String.fromEnvironment('NEWS_API_KEY');
 
+  /// Optional base URL of a server-side proxy that holds the NewsData.io key
+  /// (the web build cannot call newsdata.io directly: the API blocks CORS).
+  /// Pass --dart-define=API_BASE=https://your-proxy.example.com and the app
+  /// calls <API_BASE>/api/news without ever seeing the key.
+  /// The special value SAME (i.e. --dart-define=API_BASE=SAME) calls the
+  /// relative path /api/news on the origin serving the app.
+  static const apiBase = String.fromEnvironment('API_BASE');
+
   static bool get hasApiKey => apiKey.isNotEmpty;
+  static bool get hasApiBase => apiBase.isNotEmpty;
 }
