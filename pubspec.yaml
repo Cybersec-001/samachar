@@ -1,0 +1,27 @@
+name: samachar
+description: Bilingual (Hindi + English) current affairs news app using NewsData.io and Provider.
+publish_to: 'none'
+version: 1.0.0+1
+
+# Dart 3.4+ / Flutter 3.22+ required: the UI uses TabAlignment.start and
+# ColorScheme.surfaceContainerHighest, which do not exist in earlier versions.
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  provider: ^6.1.2
+  http: ^1.2.2
+  shared_preferences: ^2.3.2
+  cached_network_image: ^3.4.1
+  url_launcher: ^6.3.0
+  share_plus: ^10.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
