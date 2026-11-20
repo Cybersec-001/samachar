@@ -19,20 +19,31 @@ class NewsService {
     String? query,
     String? page,
   }) async {
-    if (!AppConfig.hasApiKey) {
+    if (!AppConfig.hasApiKey && !AppConfig.hasApiBase) {
       throw Exception(
           'API key missing. Run with: flutter run --dart-define=NEWS_API_KEY=your_key');
     }
 
     final params = <String, String>{
-      'apikey': AppConfig.apiKey,
       'country': 'in',
       'language': language,
       if (category != null) 'category': category,
       if (query != null && query.trim().isNotEmpty) 'q': query.trim(),
       if (page != null) 'page': page,
     };
-    final uri = Uri.https(_host, '/api/1/latest', params);
+
+    // Web deployment: route through the server-side proxy, which attaches
+    // the key. API_BASE=SAME means the proxy lives on the same origin.
+    final Uri uri;
+    if (AppConfig.hasApiBase) {
+      uri = AppConfig.apiBase == 'SAME'
+          ? Uri(path: '/api/news', queryParameters: params)
+          : Uri.parse('${AppConfig.apiBase}/api/news')
+              .replace(queryParameters: params);
+    } else {
+      params['apikey'] = AppConfig.apiKey;
+      uri = Uri.https(_host, '/api/1/latest', params);
+    }
 
     http.Response res;
     try {
