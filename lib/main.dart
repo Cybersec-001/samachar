@@ -36,7 +36,9 @@ class SamacharApp extends StatelessWidget {
       theme: ThemeData(useMaterial3: true, colorSchemeSeed: seed),
       darkTheme: ThemeData(
           useMaterial3: true, colorSchemeSeed: seed, brightness: Brightness.dark),
-      home: AppConfig.hasApiKey ? const HomeScreen() : const ApiKeySetupScreen(),
+      home: (AppConfig.hasApiKey || AppConfig.hasApiBase)
+          ? const HomeScreen()
+          : const ApiKeySetupScreen(),
     );
   }
 }
