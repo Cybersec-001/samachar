@@ -10,8 +10,9 @@
  *  - 10-minute in-memory cache per unique param combination, so repeat
  *    visits and tab switches do not burn credits.
  *  - Sliding-window per-IP rate limit (60 requests / 10 minutes).
- * Both stores are in-memory, so they reset on cold starts; that is
- * acceptable best-effort protection for a demo deployment.
+ * Both stores are in-memory, so they reset on cold starts. Successful
+ * responses also carry s-maxage=600 so Vercel's edge caches each unique
+ * param combination for 10 minutes globally (the key is never in the URL).
  */
 
 const UPSTREAM = 'https://newsdata.io/api/1/latest';
@@ -36,7 +37,7 @@ function sendJson(res, status, obj, extraHeaders) {
   const body = JSON.stringify(obj);
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
-    'Cache-Control': 'public, max-age=60',
+    'Cache-Control': 'no-store',
     ...extraHeaders,
   });
   res.end(body);
@@ -129,7 +130,7 @@ module.exports = async (req, res) => {
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
     res.writeHead(cached.status, {
       'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'public, max-age=60',
+      'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=60',
       'X-Cache': 'HIT',
     });
     return res.end(cached.body);
@@ -159,7 +160,7 @@ module.exports = async (req, res) => {
 
   res.writeHead(upstream.status, {
     'Content-Type': 'application/json; charset=utf-8',
-    'Cache-Control': 'public, max-age=60',
+    'Cache-Control': 'no-store',
     'X-Cache': 'MISS',
   });
   res.end(bodyText);
