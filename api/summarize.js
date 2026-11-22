@@ -92,8 +92,19 @@ module.exports = async (req, res) => {
     `Summarize this news story in 2 to 3 short sentences (max 60 words) in ${hindi ? 'Hindi (Devanagari)' : 'English'}. ` +
     `Use only facts in the text below. No opinions, no preamble, no bullet points.\n\n${source}`;
 
+  let list = MODELS;
+  try {
+    const lr = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': key }, signal: AbortSignal.timeout(5000) });
+    if (lr.ok) {
+      const lj = await lr.json();
+      const found = (lj.models || []).filter((m) => (m.supportedGenerationMethods || []).includes('generateContent') && /flash/.test(m.name) && !/image|tts|live|audio|preview|exp|thinking/.test(m.name)).map((m) => m.name.replace('models/', ''));
+      found.sort().reverse();
+      list = [...new Set([...MODELS.slice(0, 1), ...found.slice(0, 4)])].filter(Boolean);
+    }
+  } catch (_) {}
+  console.log('models', list.join(','));
   let r;
-  for (const MODEL of MODELS) {
+  for (const MODEL of list) {
     try {
       r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
         method: 'POST',
