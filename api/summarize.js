@@ -107,7 +107,7 @@ module.exports = async (req, res) => {
     return send(res, 504, { error: 'The AI service timed out. Try again.' });
   }
   if (r.status === 429) return send(res, 429, { error: 'AI is busy right now. Try again in a minute.' });
-  if (!r.ok) return send(res, 502, { error: 'AI summary is unavailable right now.' });
+  if (!r.ok) { let m=''; try { m=((await r.json()).error||{}).message||''; } catch (_) {} console.log('gemini', r.status, m.slice(0,200)); return send(res, 502, { error: 'AI summary is unavailable right now.', upstream: r.status, detail: m.slice(0,120) }); }
   let j;
   try { j = await r.json(); } catch (_) { return send(res, 502, { error: 'Unexpected AI response.' }); }
   const text = (((j.candidates || [])[0] || {}).content || {}).parts;
