@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
 import '../providers/history_provider.dart';
 import '../providers/news_provider.dart';
 import '../widgets/article_card.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/article_list_view.dart';
+import 'account_screen.dart';
 import 'bookmarks_screen.dart';
 import 'search_screen.dart';
 
@@ -38,6 +40,14 @@ class HomeScreen extends StatelessWidget {
                   CheckedPopupMenuItem(
                       value: l, checked: l == news.language, child: Text(l.label)),
               ],
+            ),
+            IconButton(
+              tooltip: 'Account',
+              icon: Icon(context.watch<AuthProvider>().signedIn
+                  ? Icons.account_circle
+                  : Icons.account_circle_outlined),
+              onPressed: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const AccountScreen())),
             ),
             IconButton(
               icon: const Icon(Icons.bookmarks_outlined),

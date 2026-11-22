@@ -15,6 +15,11 @@ class AppConfig {
   /// relative path /api/news on the origin serving the app.
   static const apiBase = String.fromEnvironment('API_BASE');
 
+  /// Supabase (login + synced bookmarks). The project URL and the publishable
+  /// key are public by design: access is enforced by row-level security.
+  static const supabaseUrl = 'https://ybbrrftwgxrxskilcwzv.supabase.co';
+  static const supabaseKey = 'sb_publishable_ovtIhLMISLXLZDRvya7-Kw_V-oJy2MT';
+
   static bool get hasApiKey => apiKey.isNotEmpty;
   static bool get hasApiBase => apiBase.isNotEmpty;
 }

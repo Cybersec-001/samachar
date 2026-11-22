@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -19,6 +21,38 @@ class DetailScreen extends StatefulWidget {
 class _DetailScreenState extends State<DetailScreen> {
   Article get article => widget.article;
   bool _speaking = false;
+  bool _sumLoading = false;
+  String? _summary;
+  String? _sumError;
+
+  Future<void> _summarize() async {
+    setState(() {
+      _sumLoading = true;
+      _sumError = null;
+    });
+    try {
+      final hindi = RegExp(r'[\u0900-\u097F]').hasMatch(article.title);
+      final r = await http
+          .post(Uri(path: '/api/summarize'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'title': article.title,
+                'description': article.description,
+                'link': article.link,
+                'lang': hindi ? 'hi' : 'en',
+              }))
+          .timeout(const Duration(seconds: 30));
+      final j = jsonDecode(utf8.decode(r.bodyBytes)) as Map<String, dynamic>;
+      if (r.statusCode == 200 && j['summary'] is String) {
+        _summary = j['summary'] as String;
+      } else {
+        _sumError = (j['error'] ?? 'Summary unavailable.').toString();
+      }
+    } catch (_) {
+      _sumError = 'Could not reach the summary service.';
+    }
+    if (mounted) setState(() => _sumLoading = false);
+  }
 
   @override
   void initState() {
@@ -128,6 +162,48 @@ class _DetailScreenState extends State<DetailScreen> {
                 const SizedBox(height: 16),
                 Text(article.description ?? 'Tap below to read the full story.',
                     style: theme.textTheme.bodyLarge?.copyWith(height: 1.6)),
+                const SizedBox(height: 16),
+                if (_summary != null)
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.secondaryContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          const Icon(Icons.auto_awesome, size: 18),
+                          const SizedBox(width: 6),
+                          Text('AI summary',
+                              style: theme.textTheme.labelLarge
+                                  ?.copyWith(fontWeight: FontWeight.bold)),
+                        ]),
+                        const SizedBox(height: 8),
+                        Text(_summary!,
+                            style: theme.textTheme.bodyLarge?.copyWith(height: 1.5)),
+                      ],
+                    ),
+                  )
+                else ...[
+                  OutlinedButton.icon(
+                    icon: _sumLoading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.auto_awesome),
+                    label: Text(_sumLoading ? 'Summarising...' : 'AI summary'),
+                    onPressed: _sumLoading ? null : _summarize,
+                  ),
+                  if (_sumError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(_sumError!,
+                          style: TextStyle(color: theme.colorScheme.error)),
+                    ),
+                ],
                 const SizedBox(height: 24),
                 FilledButton.icon(
                   icon: const Icon(Icons.open_in_new),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'config.dart';
+import 'providers/auth_provider.dart';
 import 'providers/bookmark_provider.dart';
 import 'providers/history_provider.dart';
 import 'providers/news_provider.dart';
@@ -15,7 +16,9 @@ Future<void> main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => NewsProvider(prefs)),
-        ChangeNotifierProvider(create: (_) => BookmarkProvider(prefs)),
+        ChangeNotifierProvider(create: (_) => AuthProvider(prefs)),
+        ChangeNotifierProvider(
+            create: (ctx) => BookmarkProvider(prefs, ctx.read<AuthProvider>())),
         ChangeNotifierProvider(create: (_) => ThemeProvider(prefs)),
         ChangeNotifierProvider(create: (_) => HistoryProvider(prefs)),
       ],
