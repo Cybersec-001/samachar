@@ -7,7 +7,7 @@
 const crypto = require('crypto');
 const redis = require('./_redis');
 
-const MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest';
+const MODELS = [process.env.GEMINI_MODEL, 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-2.5-flash'].filter(Boolean);
 const RATE_WINDOW_MS = 10 * 60 * 1000;
 const RATE_MAX = 20;
 const DAILY_CAP = 400;
@@ -93,19 +93,22 @@ module.exports = async (req, res) => {
     `Use only facts in the text below. No opinions, no preamble, no bullet points.\n\n${source}`;
 
   let r;
-  try {
-    r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 400 },
-      }),
-      signal: AbortSignal.timeout(20000),
-    });
-  } catch (_) {
-    return send(res, 504, { error: 'The AI service timed out. Try again.' });
+  for (const MODEL of MODELS) {
+    try {
+      r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 400 },
+        }),
+        signal: AbortSignal.timeout(8000),
+      });
+    } catch (_) { r = null; continue; }
+    if (r.ok) break;
+    if (r.status !== 503 && r.status !== 404 && r.status !== 429) break;
   }
+  if (!r) return send(res, 504, { error: 'The AI service timed out. Try again.' });
   if (r.status === 429) return send(res, 429, { error: 'AI is busy right now. Try again in a minute.' });
   if (!r.ok) { let m=''; try { m=((await r.json()).error||{}).message||''; } catch (_) {} console.log('gemini', r.status, m.slice(0,200)); return send(res, 502, { error: 'AI summary is unavailable right now.', upstream: r.status, detail: m.slice(0,120) }); }
   let j;
