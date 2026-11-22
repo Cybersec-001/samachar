@@ -10,10 +10,9 @@ curl -fsSL https://storage.googleapis.com/flutter_infra_release/releases/stable/
 tar -xJf sdk.tar.xz
 git config --global --add safe.directory "$PWD/flutter"
 
-./flutter/bin/flutter create . --platforms web --project-name samachar
+# web/ (index.html with loading screen, PWA manifest, icons, bridge.js) is committed.
+if [ ! -f web/index.html ]; then ./flutter/bin/flutter create . --platforms web --project-name samachar; fi
 
-sed -i 's|<title>samachar</title>|<title>Samachar - Hindi + English News</title>|; s|A new Flutter project.|Samachar: bilingual Hindi + English current affairs news from across India.|' web/index.html
-sed -i 's|"name": "samachar"|"name": "Samachar - Hindi + English News"|; s|"short_name": "samachar"|"short_name": "Samachar"|; s|#0175C2|#1E3A8A|g; s|A new Flutter project.|Samachar - bilingual Hindi + English news.|' web/manifest.json
 
 ./flutter/bin/flutter pub get
 ./flutter/bin/flutter build web --release --no-wasm-dry-run --dart-define=API_BASE=SAME

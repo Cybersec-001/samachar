@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'config.dart';
 import 'providers/bookmark_provider.dart';
+import 'providers/history_provider.dart';
 import 'providers/news_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/home_screen.dart';
@@ -16,6 +17,7 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => NewsProvider(prefs)),
         ChangeNotifierProvider(create: (_) => BookmarkProvider(prefs)),
         ChangeNotifierProvider(create: (_) => ThemeProvider(prefs)),
+        ChangeNotifierProvider(create: (_) => HistoryProvider(prefs)),
       ],
       child: const SamacharApp(),
     ),

@@ -15,7 +15,12 @@
  * param combination for 10 minutes globally (the key is never in the URL).
  */
 
+const redis = require('./_redis');
+
 const UPSTREAM = 'https://newsdata.io/api/1/latest';
+// Hard cap on real NewsData calls per UTC day (free plan = 200 credits).
+const DAILY_CAP = 180;
+const STALE_TTL_S = 7 * 24 * 3600;
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const CACHE_MAX = 200;
 const RATE_WINDOW_MS = 10 * 60 * 1000;
@@ -126,6 +131,13 @@ module.exports = async (req, res) => {
   }
 
   const cacheKey = params.toString();
+
+  // Shared (Redis) cache survives cold starts and is shared by all instances.
+  const rkey = 'nc:' + cacheKey;
+  if (redis.enabled() && !cache.get(cacheKey)) {
+    const hit = await redis.cmd(['GET', rkey]);
+    if (typeof hit === 'string') cache.set(cacheKey, { ts: Date.now(), status: 200, body: hit });
+  }
   const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
     res.writeHead(cached.status, {
@@ -134,6 +146,45 @@ module.exports = async (req, res) => {
       'X-Cache': 'HIT',
     });
     return res.end(cached.body);
+  }
+
+  // Daily quota cap: count every real upstream call. Past the cap we never
+  // call NewsData; we serve the last good copy of this feed instead.
+  const staleKey = 'ns:' + cacheKey;
+  async function serveStale(reason) {
+    const stale = redis.enabled() ? await redis.cmd(['GET', staleKey]) : null;
+    if (typeof stale === 'string') {
+      res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'X-Cache': 'STALE',
+        'X-Stale-Reason': reason,
+      });
+      res.end(stale);
+      return true;
+    }
+    const mem = cache.get(cacheKey);
+    if (mem) {
+      res.writeHead(200, {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'X-Cache': 'STALE',
+        'X-Stale-Reason': reason,
+      });
+      res.end(mem.body);
+      return true;
+    }
+    return false;
+  }
+
+  if (redis.enabled()) {
+    const day = new Date().toISOString().slice(0, 10);
+    const used = await redis.cmd(['INCR', 'quota:' + day]);
+    if (used === 1) await redis.cmd(['EXPIRE', 'quota:' + day, 172800]);
+    if (typeof used === 'number' && used > DAILY_CAP) {
+      if (await serveStale('cap')) return;
+      return sendJson(res, 429, errorBody('Daily free news limit reached. Try again tomorrow.'));
+    }
   }
 
   params.set('apikey', key);
@@ -145,6 +196,7 @@ module.exports = async (req, res) => {
     });
   } catch (e) {
     const timedOut = e && (e.name === 'TimeoutError' || e.name === 'AbortError');
+    if (await serveStale('upstream-error')) return;
     return sendJson(res, timedOut ? 504 : 502, errorBody(timedOut ? 'News server timed out. Try again.' : 'News server unreachable. Try again.'));
   }
 
@@ -152,11 +204,17 @@ module.exports = async (req, res) => {
   // Only cache successful JSON payloads; never cache upstream errors.
   if (upstream.status === 200 && bodyText.includes('"status":"success"')) {
     cache.set(cacheKey, { ts: Date.now(), status: upstream.status, body: bodyText });
+    if (redis.enabled()) {
+      await redis.cmd(['SET', rkey, bodyText, 'EX', 600]);
+      await redis.cmd(['SET', staleKey, bodyText, 'EX', STALE_TTL_S]);
+    }
     if (cache.size > CACHE_MAX) {
       const oldest = cache.keys().next().value;
       cache.delete(oldest);
     }
   }
+
+  if (upstream.status !== 200 && (await serveStale('upstream-' + upstream.status))) return;
 
   res.writeHead(upstream.status, {
     'Content-Type': 'application/json; charset=utf-8',

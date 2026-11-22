@@ -5,10 +5,59 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/article.dart';
 import '../providers/bookmark_provider.dart';
+import '../providers/history_provider.dart';
+import '../services/bridge.dart';
 
-class DetailScreen extends StatelessWidget {
+class DetailScreen extends StatefulWidget {
   final Article article;
   const DetailScreen({super.key, required this.article});
+
+  @override
+  State<DetailScreen> createState() => _DetailScreenState();
+}
+
+class _DetailScreenState extends State<DetailScreen> {
+  Article get article => widget.article;
+  bool _speaking = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Remember what was read: feeds the "For You" ranking.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<HistoryProvider>().record(article);
+    });
+  }
+
+  @override
+  void dispose() {
+    Bridge.stopSpeaking();
+    super.dispose();
+  }
+
+  void _toggleSpeak() {
+    if (_speaking) {
+      Bridge.stopSpeaking();
+      setState(() => _speaking = false);
+      return;
+    }
+    final text = [article.title, article.description ?? '']
+        .where((t) => t.isNotEmpty)
+        .join('. ');
+    final hindi = RegExp(r'[\u0900-\u097F]').hasMatch(text);
+    Bridge.speak(text, hindi ? 'hi-IN' : 'en-IN');
+    setState(() => _speaking = true);
+    // The browser has no reliable end callback across engines: poll briefly.
+    Future.doWhile(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      if (!mounted) return false;
+      if (!Bridge.speaking) {
+        setState(() => _speaking = false);
+        return false;
+      }
+      return true;
+    });
+  }
 
   Future<void> _openArticle(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
@@ -39,6 +88,12 @@ class DetailScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         actions: [
+          if (Bridge.ttsSupported)
+            IconButton(
+              tooltip: _speaking ? 'Stop' : 'Listen',
+              icon: Icon(_speaking ? Icons.stop_circle : Icons.headphones),
+              onPressed: _toggleSpeak,
+            ),
           IconButton(
             icon: Icon(saved ? Icons.bookmark : Icons.bookmark_border),
             onPressed: () => context.read<BookmarkProvider>().toggle(article),

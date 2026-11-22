@@ -7,6 +7,7 @@ class Article {
   final String source;
   final String? language;
   final DateTime? pubDate;
+  final String? category;
 
   const Article({
     required this.id,
@@ -17,6 +18,7 @@ class Article {
     this.imageUrl,
     this.language,
     this.pubDate,
+    this.category,
   });
 
 
@@ -31,6 +33,14 @@ class Article {
     if (url.startsWith('http://')) url = 'https://${url.substring(7)}';
     if (!url.startsWith('https://')) return null; // not a loadable web image
     return url;
+  }
+
+  static String? _firstCategory(Object? raw) {
+    if (raw is List && raw.isNotEmpty && raw.first is String) {
+      return raw.first as String;
+    }
+    if (raw is String && raw.isNotEmpty) return raw;
+    return null;
   }
 
   factory Article.fromJson(Map<String, dynamic> j) {
@@ -50,6 +60,7 @@ class Article {
       source: (j['source_name'] ?? j['source_id'] ?? 'Unknown') as String,
       language: j['language'] as String?,
       pubDate: date,
+      category: _firstCategory(j['category']),
     );
   }
 
@@ -62,6 +73,7 @@ class Article {
         'source': source,
         'language': language,
         'pubDate': pubDate?.toIso8601String(),
+        'category': category,
       };
 
   factory Article.fromSaved(Map<String, dynamic> j) => Article(
@@ -73,6 +85,7 @@ class Article {
         source: j['source'],
         language: j['language'],
         pubDate: j['pubDate'] == null ? null : DateTime.tryParse(j['pubDate']),
+        category: j['category'] as String?,
       );
 
   String get timeAgo {

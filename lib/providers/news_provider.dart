@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/article.dart';
@@ -37,6 +38,9 @@ class Feed {
   bool loading = false;
   bool loaded = false;
   String? error;
+
+  /// True when the articles shown are a saved copy because the network failed.
+  bool offline = false;
 
   /// Bumped when a refresh supersedes an in-flight request, so the older
   /// request's result is discarded instead of overwriting fresh data.
@@ -91,6 +95,29 @@ class NewsProvider extends ChangeNotifier {
     if (_query.isNotEmpty) await load(searchKey);
   }
 
+  String _cacheKey(String key) => 'fc:${_language.name}:$key';
+
+  void _saveCache(String key, List<Article> list) {
+    try {
+      _prefs.setString(_cacheKey(key),
+          jsonEncode(list.take(40).map((a) => a.toJson()).toList()));
+    } catch (_) {}
+  }
+
+  List<Article> _readCache(String key) {
+    final raw = _prefs.getString(_cacheKey(key));
+    if (raw == null) return const [];
+    final out = <Article>[];
+    try {
+      for (final e in jsonDecode(raw) as List) {
+        try {
+          out.add(Article.fromSaved(e as Map<String, dynamic>));
+        } catch (_) {}
+      }
+    } catch (_) {}
+    return out;
+  }
+
   /// Loads the first page, or the next page if already loaded.
   Future<void> load(String key, {bool refresh = false}) async {
     final feed = feedFor(key);
@@ -118,13 +145,24 @@ class NewsProvider extends ChangeNotifier {
       );
       if (stale()) return;
       if (isFirst) feed.articles.clear();
+      feed.offline = false;
       final seen = feed.articles.map((a) => a.id).toSet();
       feed.articles.addAll(page.articles.where((a) => seen.add(a.id)));
       feed.nextPage = page.nextPage;
       feed.loaded = true;
+      if (isFirst && key != searchKey) _saveCache(key, feed.articles);
     } catch (e) {
       if (stale()) return;
-      feed.error = e.toString().replaceFirst('Exception: ', '');
+      final saved = isFirst && key != searchKey ? _readCache(key) : const <Article>[];
+      if (saved.isNotEmpty && feed.articles.isEmpty) {
+        // Offline / quota / server trouble: show the last saved copy instead of an error.
+        feed.articles.addAll(saved);
+        feed.offline = true;
+        feed.loaded = true;
+        feed.nextPage = null;
+      } else {
+        feed.error = e.toString().replaceFirst('Exception: ', '');
+      }
     } finally {
       if (!stale()) {
         feed.loading = false;

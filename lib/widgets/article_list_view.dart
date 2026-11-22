@@ -70,13 +70,32 @@ class _ArticleListViewState extends State<ArticleListView> {
     }
 
     final showFooter = f.loading || f.error != null;
+    final banner = f.offline ? 1 : 0;
     return RefreshIndicator(
       onRefresh: widget.onRefresh,
       child: ListView.builder(
         controller: _controller,
         physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: f.articles.length + (showFooter ? 1 : 0),
-        itemBuilder: (_, i) {
+        itemCount: banner + f.articles.length + (showFooter ? 1 : 0),
+        itemBuilder: (_, idx) {
+          if (banner == 1 && idx == 0) {
+            return Container(
+              margin: const EdgeInsets.fromLTRB(12, 8, 12, 2),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.secondaryContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Row(children: [
+                Icon(Icons.cloud_off, size: 18),
+                SizedBox(width: 8),
+                Expanded(
+                    child: Text(
+                        'Offline: showing saved articles. Pull down to retry.')),
+              ]),
+            );
+          }
+          final i = idx - banner;
           if (i < f.articles.length) return ArticleCard(article: f.articles[i]);
           return Padding(
             padding: const EdgeInsets.all(16),

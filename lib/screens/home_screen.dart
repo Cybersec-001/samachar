@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../providers/history_provider.dart';
 import '../providers/news_provider.dart';
+import '../widgets/article_card.dart';
 import '../providers/theme_provider.dart';
 import '../widgets/article_list_view.dart';
 import 'bookmarks_screen.dart';
@@ -15,7 +17,7 @@ class HomeScreen extends StatelessWidget {
     final hindi = news.language == NewsLanguage.hindi;
 
     return DefaultTabController(
-      length: categories.length,
+      length: categories.length + 1,
       child: Scaffold(
         appBar: AppBar(
           title: Text(hindi ? 'समाचार' : 'Samachar',
@@ -54,11 +56,17 @@ class HomeScreen extends StatelessWidget {
           bottom: TabBar(
             isScrollable: true,
             tabAlignment: TabAlignment.start,
-            tabs: [for (final c in categories) Tab(text: hindi ? c.hi : c.en)],
+            tabs: [
+              Tab(text: hindi ? 'आपके लिए' : 'For You'),
+              for (final c in categories) Tab(text: hindi ? c.hi : c.en),
+            ],
           ),
         ),
         body: TabBarView(
-          children: [for (final c in categories) _CategoryTab(category: c)],
+          children: [
+            const _ForYouTab(),
+            for (final c in categories) _CategoryTab(category: c),
+          ],
         ),
       ),
     );
@@ -95,6 +103,103 @@ class _CategoryTabState extends State<_CategoryTab>
       feed: feed,
       onRefresh: () => news.load(widget.category.key, refresh: true),
       onLoadMore: () => news.load(widget.category.key),
+    );
+  }
+}
+
+/// Personalised feed: merges the feeds the reader cares about (from local
+/// reading history) and ranks unread articles by category/source affinity.
+class _ForYouTab extends StatefulWidget {
+  const _ForYouTab();
+
+  @override
+  State<_ForYouTab> createState() => _ForYouTabState();
+}
+
+class _ForYouTabState extends State<_ForYouTab>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  List<String> _keys(HistoryProvider h) {
+    final fav = h.topCategories
+        .where((k) => categories.any((c) => c.key == k))
+        .take(2)
+        .toList();
+    final defaults = ['politics', 'technology'];
+    final keys = <String>['top', ...fav];
+    for (final d in defaults) {
+      if (keys.length >= 3) break;
+      if (!keys.contains(d)) keys.add(d);
+    }
+    return keys;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    final news = context.watch<NewsProvider>();
+    final history = context.watch<HistoryProvider>();
+    final keys = _keys(history);
+
+    final feeds = [for (final k in keys) news.feedFor(k)];
+    for (var i = 0; i < keys.length; i++) {
+      final f = feeds[i];
+      if (!f.loaded && !f.loading && f.error == null) {
+        final key = keys[i];
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) news.load(key);
+        });
+      }
+    }
+
+    final merged = history.rank(feeds.expand((f) => f.articles));
+    final loading = feeds.any((f) => f.loading) && merged.isEmpty;
+    final failed = merged.isEmpty && feeds.every((f) => f.error != null);
+
+    if (loading) return const Center(child: CircularProgressIndicator());
+    if (failed) {
+      return Center(
+        child: FilledButton.icon(
+          onPressed: () {
+            for (final k in keys) {
+              news.load(k, refresh: true);
+            }
+          },
+          icon: const Icon(Icons.refresh),
+          label: const Text('Retry'),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        await Future.wait([for (final k in keys) news.load(k, refresh: true)]);
+      },
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemCount: merged.length + 1,
+        itemBuilder: (context, i) {
+          if (i == 0) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Row(children: [
+                const Icon(Icons.auto_awesome, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    history.hasHistory
+                        ? 'Picked for you from what you read'
+                        : 'Read a few stories and this feed learns your taste',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                ),
+              ]),
+            );
+          }
+          return ArticleCard(article: merged[i - 1]);
+        },
+      ),
     );
   }
 }
